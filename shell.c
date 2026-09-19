@@ -7,20 +7,20 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
+#define MAX_PIPES 128
 #define PIPELINE_FLAG (1 << 0) // -> 0001
 #define REDIRECTION_FLAG (1 << 1) // -> 0010
-
-
 
 unsigned int flags = ~(PIPELINE_FLAG | REDIRECTION_FLAG);
 // 0000 if all flags are deactivated, 0011 if all flags are activated
 
+int pipeIndexes[MAX_PIPES];
 int pipeIndex;
+int numPipes;
 
 
 void parser(char *input, char *argv[]){ //parse the user's input
-        int i;
-        int j = 0;
+        int i, j = 0, k = 0;
         bool word = false;
         for (i = 0; input[i] != '\0'; i++){
             if (input[i] == ' '){
@@ -34,7 +34,10 @@ void parser(char *input, char *argv[]){ //parse the user's input
                 word = false;
                 flags |= PIPELINE_FLAG;
                 pipeIndex = j;
+                pipeIndexes[k] = pipeIndex;
+                numPipes++;
                 j++;
+                k++;
                 continue;
 
             }
@@ -103,6 +106,11 @@ int main(int argc, char **argv)
 
     if (strlen(input) == 0) continue;
 
+    for (int i = 0; pipeIndexes[i] != '\0'; i++) pipeIndexes[i] = 0;
+    numPipes = 0;
+    pipeIndex = 0;
+
+
     char *argv[MAX_INPUT]; //User's input is stored here
 
     parser(input, argv); //
@@ -160,46 +168,52 @@ int main(int argc, char **argv)
     }
  
     if (flags & PIPELINE_FLAG){ //Execute the user's input if there's a pipeline
-            int fd[2];
-            if (pipe(fd) == -1){
-                printf("Error while doing the pipe");
-                return 0;
+                
+            int procs = numPipes + 1; //Number of process
+            int fd[2 * numPipes];
+            int fdIndex = 0;
+            int start[procs];
+            start[0] = 0;
+            for (int i = 0; i < numPipes; i++){
+                if (pipe(&fd[2 * i]) == -1){
+                    printf("Error while doing the pipe");
+                    return 0;
+                }   
             }
 
-            argv[pipeIndex] = NULL;
+            for (int i = 0; pipeIndexes[i] != '\0'; i++) argv[pipeIndexes[i]] = NULL;
 
-            pid_t p1 = fork(); //firs fork for the left child
+            pid_t pids[procs];
 
-            if (p1 == 0){
+            for (int i = 0; i < procs; i++){
 
-                dup2(fd[1], STDOUT_FILENO);
-                close(fd[0]);
-                close(fd[1]);
+                pids[i] = fork();
 
-                execvp(argv[0], argv);
-                perror("execvp left");
-                exit(1);
+
+                if (pids[i] == 0) {
+
+                    if (i == 0) dup2(fd[1], STDOUT_FILENO);
+                    else if (i == procs - 1) dup2(fd[2 * (numPipes - 1)], STDIN_FILENO);
+                    else {dup2(fd[2 * (i - 1)], STDIN_FILENO); dup2(fd[2 * i + 1], STDOUT_FILENO);}
+                    for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
+                    for (int i = 1; i < procs; i++) start[i] = pipeIndexes[i - 1] + 1;
+
+                    execvp(argv[start[i]], &argv[start[i]]);
+                    perror("execvp");
+                    exit(1);
+                    
+
+                }
+
             }
-
-            pid_t p2 = fork(); //second fork for the right child
-
-            if (p2 == 0){
-                dup2(fd[0], STDIN_FILENO);
-                close(fd[0]);
-                close(fd[1]);
-                execvp(argv[pipeIndex + 1], argv + pipeIndex + 1);
-                perror("execvp right");
-                exit(1);
-
-            }
-
-            close(fd[0]);
-            close(fd[1]);
-            wait(NULL);
-            wait(NULL);
+            
+            for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
+            for (int i = 0; i < procs; i++) wait(NULL);
             flags &= ~PIPELINE_FLAG;
             continue;
-        }
+
+
+    }
 
     int redirection_type = 0; //Check if the user's input has any redirection
     int j;
