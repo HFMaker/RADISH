@@ -1,6 +1,6 @@
-# MINI-SHELL PROJECT IN C
+# RADISH PROJECT
 
-This is just a Shell I decided to make because I wanna use my own Shell instead of bash or zsh
+RADISH - Real And Definitive implementation of a SHell
 
 - Current version: 1.2.5
 

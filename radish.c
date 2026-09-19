@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 {
     char input[255];
   
-    puts("You are now using \x1B[1;36mhf-shell\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m");
+    puts("You are now using \x1B[1;36mradish\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m");
     
 
     while (1) //Main loop
@@ -281,7 +281,7 @@ int main(int argc, char **argv)
 
     if (pid == 0){
         execvp(argv[0], argv);
-        printf("hf-shell: %s: command not found\n", argv[0]);
+        printf("radish: %s: command not found\n", argv[0]);
         exit(1);
     }
     else wait(NULL);
