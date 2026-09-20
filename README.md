@@ -14,7 +14,7 @@ RADISH - Real And Definitive implementation of a SHell
 - Pipelines support
 - Single redirections support
 
-### Things NOT included in this version (they will be added in later)
+### Things NOT included in this version (they will be added in later versions)
 
 - Multiple redirections
 - Advanced parser
