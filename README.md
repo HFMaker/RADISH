@@ -1,8 +1,8 @@
-# RADISH PROJECT
+# RADISH PROJECT 🫜
 
 RADISH - Real And Definitive implementation of a SHell
 
-- Current version: 1.2.5
+- Current version: v1.2.5
 
 
 ### Things included in this version
