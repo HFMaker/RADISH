@@ -9,7 +9,7 @@ RADISH - Real And Definitive implementation of a SHell
 
 - Simple parser made by myself
 - Some built-in commands (cd, exit...)
-- Execution of simple commands (commands that don't have pipes nor redirections)
+- Execution
 - Execution flags (pipeline flag, redirection flag...)
 - Pipelines support
 - Single redirections support
@@ -20,6 +20,7 @@ RADISH - Real And Definitive implementation of a SHell
 - Advanced parser
 - More built-in commands
 - Other types of special commands (like && or &)
+- Combination of pipelines and redirections
 
 
 
