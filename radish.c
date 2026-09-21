@@ -111,17 +111,17 @@ int main(int argc, char **argv)
     pipeIndex = 0;
 
 
-    char *argv[MAX_INPUT]; //User's input is stored here
+    char *args[MAX_INPUT]; //User's input is stored here
 
-    parser(input, argv); //
+    parser(input, args); //
 
     //Some built-in commands and some new commands are down below
      
-    if (strcmp(argv[0], "cd") == 0){ 
-         if (!argv[1]){
+    if (strcmp(args[0], "cd") == 0){ 
+         if (!args[1]){
             chdir(getenv("HOME")); //get the user's home directory
          } else{
-             if (chdir(argv[1]) != 0){
+             if (chdir(args[1]) != 0){
                 perror("cd");
             }
          }
@@ -130,11 +130,11 @@ int main(int argc, char **argv)
     }
 
     
-    if (strcmp(argv[0], "exit") == 0){
+    if (strcmp(args[0], "exit") == 0){
         exit(0); //exti the program 
     }
 
-    if (strcmp(argv[0], "openshell") == 0){ //
+    if (strcmp(args[0], "openshell") == 0){ //
         pid_t pid = fork();
 
         if (pid == 0)
@@ -156,7 +156,7 @@ int main(int argc, char **argv)
             execlp("xterm", "xterm", "-e", "./hf-shell", NULL);
             perror("Compatible terminal not found");
             exit(1);
-            execvp(argv[0], argv);
+            execvp(args[0], args);
             perror("execvp");
             exit(1);
         }
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
                 }   
             }
 
-            for (int i = 0; pipeIndexes[i] != '\0'; i++) argv[pipeIndexes[i]] = NULL;
+            for (int i = 0; pipeIndexes[i] != '\0'; i++) args[pipeIndexes[i]] = NULL;
 
             pid_t pids[procs];
 
@@ -198,7 +198,7 @@ int main(int argc, char **argv)
                     for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
                     for (int i = 1; i < procs; i++) start[i] = pipeIndexes[i - 1] + 1;
 
-                    execvp(argv[start[i]], &argv[start[i]]);
+                    execvp(args[start[i]], &args[start[i]]);
                     perror("execvp");
                     exit(1);
                     
@@ -218,23 +218,23 @@ int main(int argc, char **argv)
     int redirection_type = 0; //Check if the user's input has any redirection
     int j;
     int redirection_index;
-    for (j = 0; argv[j] != NULL; j++){
-         if (strcmp(argv[j], ">") == 0){
+    for (j = 0; args[j] != NULL; j++){
+         if (strcmp(args[j], ">") == 0){
             redirection_type = 1;
             redirection_index = j;
-            argv[j] = NULL;
+            args[j] = NULL;
          }
 
-         else if (strcmp(argv[j], ">>") == 0){
+         else if (strcmp(args[j], ">>") == 0){
             redirection_type = 2;
             redirection_index = j;
-            argv[j] = NULL;
+            args[j] = NULL;
          }
 
-         else if (strcmp(argv[j], "<") == 0){
+         else if (strcmp(args[j], "<") == 0){
             redirection_type = 3;
             redirection_index = j;
-            argv[j] = NULL;
+            args[j] = NULL;
          }
     }
 
@@ -243,15 +243,15 @@ int main(int argc, char **argv)
         if (pid == 0){
             int fd_archivo;
             if (redirection_type == 1){
-                fd_archivo = open(argv[redirection_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
             }
 
             else if (redirection_type == 2){
-                fd_archivo = open(argv[redirection_index + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
+                fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
             }
             
             else if (redirection_type == 3){
-                fd_archivo = open(argv[redirection_index + 1], O_RDONLY, 0644);
+                fd_archivo = open(args[redirection_index + 1], O_RDONLY, 0644);
             }
             
             
@@ -269,7 +269,7 @@ int main(int argc, char **argv)
                 perror("close");
                 exit(1);
             }
-            execvp(argv[0], argv);
+            execvp(args[0], args);
         }
         
         wait(NULL);
@@ -280,8 +280,8 @@ int main(int argc, char **argv)
     pid_t pid = fork();// Execute the user's input if there's no pipeline or redirection
 
     if (pid == 0){
-        execvp(argv[0], argv);
-        printf("radish: %s: command not found\n", argv[0]);
+        execvp(args[0], args);
+        printf("radish: %s: command not found\n", args[0]);
         exit(1);
     }
     else wait(NULL);
