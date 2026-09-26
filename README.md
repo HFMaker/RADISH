@@ -22,6 +22,11 @@ RADISH - Real And Definitive implementation of a SHell
 - Other types of special commands (like && or &)
 - Combination of pipelines and redirections
 
+### IMPORTANT NOTES
+
+- All the comments are in English
+- If you see someone called "alumno7", that's me using another PC
+
 
 
 
