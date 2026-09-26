@@ -9,7 +9,7 @@ RADISH - Real And Definitive implementation of a SHell
 
 - Simple parser made by myself
 - Some built-in commands (cd, exit...)
-- Execution
+- Execution of simple commands
 - Execution flags (pipeline flag, redirection flag...)
 - Pipelines support
 - Single redirections support
