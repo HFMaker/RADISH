@@ -16,6 +16,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+
+/* ~~~ TODO list ~~~ */
+
+/*
+ * Finish the pipes + redirections implementation
+ * Implement signal handling (for now Ctrl+C and Ctrl+Z)
+ *
+ *
+ *
+ * */
+
+
+
 /* ~~~ #include DECLARATIONS ~~~ */
 
 #include <stdio.h>
@@ -35,16 +48,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PIPELINE_FLAG (1 << 0) // -> 0001
 #define REDIRECTION_FLAG (1 << 1) // -> 0010
 
-#define APPEND (1 << 0) // -> 0001
-#define INPUT (1 << 1) // -> 0010
-
-
 /* ~~~ GLOBAL VARIABLES DECLARATIONS ~~~ */
 
 unsigned int flags = ~(PIPELINE_FLAG | REDIRECTION_FLAG);
 // 0000 if all flags are deactivated, 0011 if all flags are activated
 
-unsigned int redirFlags = ~(APPEND | INPUT); 
+unsigned int redirFlags; 
 
 //arrays where all the pipes and redirections on the user's input are stored
 int pipeIndexes[MAX_PIPES]; 
@@ -84,7 +93,7 @@ void parser(char *input, char *argv[]){ //parse the user's input
                 flags |= PIPELINE_FLAG; //activate the pipeline flag...
                 pipeIndex = j;//...save the pipe position to a pipe index
                 pipeIndexes[k] = pipeIndex;//and add that pipe to an array with the pipe indexes
-                numPipes++;//also increment the number of pipes by one
+                numPipes++;
                 j++;
                 k++;
                 continue;
@@ -123,10 +132,8 @@ void parser(char *input, char *argv[]){ //parse the user's input
 
             if (input[i] != ' ' && word == false){
                     argv[j] = &input[i];
+		    word = true;
                     j++;
-
-            if (input[i] != ' ')
-                word = true;
             }
         }
     argv[j] = NULL;
@@ -134,8 +141,8 @@ void parser(char *input, char *argv[]){ //parse the user's input
 
 void printPrompt(void){ //print the user's promt
 	
-    char buffer[256]; //
-    char *user = getenv("USER"); //get the user's username
+    char buffer[256];
+    char *user = getenv("USER"); 
     snprintf(buffer, sizeof(buffer), "/home/%s", user);
     char *cwd = getcwd(NULL, 0);
     char host[HOST_NAME_MAX + 1];
@@ -148,10 +155,12 @@ void printPrompt(void){ //print the user's promt
 /* ~~~ MAIN FUNCTION ~~~ */
 
 int main(int argc, char **argv){ 
+
+	struct sigaction sa; //TODO: config the sigaction struct parameters		
     
 	char input[255]; //unmodified user's input is stored here
   
-    	puts("You are now using \x1B[1;36mradish\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m"); 
+    	puts("You are now using \x1B[1;36mRADISH\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m"); 
     
 
     	while (1){ //Main loop
@@ -193,9 +202,7 @@ int main(int argc, char **argv){
 		    }
 
 		    
-		    if (strcmp(args[0], "exit") == 0){ //exit the program if "exit" is the fist argument
-			exit(0); 
-		    }
+		    if (strcmp(args[0], "exit") == 0) exit(0); 
 
 		    if (strcmp(args[0], "openshell") == 0){
 			/* Open a new shell if "openshell" is the first argument
@@ -241,7 +248,7 @@ int main(int argc, char **argv){
 			    int start[procs];
 			    start[0] = 0;
 			    for (int i = 0; i < numPipes; i++){
-				if (pipe(&fd[2 * i]) == -1){printf("Error while doing a pipe()"); return 0;}   
+				if (pipe(&fd[2 * i]) == -1){perror("pipe"); return 0;}   
 			    }
 
 				    
@@ -269,7 +276,7 @@ int main(int argc, char **argv){
 
 				    for (int i = 0; i < numRedirs; i++){
 					if (open(args[redirIndexes[i] + 1], redirFlags, 0644) == -1){
-						printf("Error while doing an open()\n"); 
+						perror("open"); 
 						return 0;
 					}
 
@@ -362,7 +369,7 @@ int main(int argc, char **argv){
 
 		    if (pid == 0){
 			execvp(args[0], args);
-			printf("radish: %s: command not found\n", args[0]);
+			printf("-radish: %s: command not found\n", args[0]);
 			exit(1);
 		    }
 		    else wait(NULL);
