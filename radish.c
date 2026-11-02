@@ -17,7 +17,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 
+/* ~~~ TODO list ~~~ */
 
+/*
+ * Finish the pipes + redirections implementation (right now it only works for the last argument)
+ * Implement signal handling (for now Ctrl+C and Ctrl+Z)
+ *
+ *
+ *
+ * */
+
+
+
+/* ~~~ #include DECLARATIONS ~~~ */
 
 #include <stdio.h>
 #include <string.h>
@@ -27,35 +39,65 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <sys/wait.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <signal.h>
+
+/* ~~~ MACROS AND FLAGS DECLARATIONS ~~~ */
 
 #define MAX_PIPES 128
+#define MAX_REDIRS 128
 #define PIPELINE_FLAG (1 << 0) // -> 0001
 #define REDIRECTION_FLAG (1 << 1) // -> 0010
+
+/* ~~~ GLOBAL VARIABLES DECLARATIONS ~~~ */
 
 unsigned int flags = ~(PIPELINE_FLAG | REDIRECTION_FLAG);
 // 0000 if all flags are deactivated, 0011 if all flags are activated
 
-int pipeIndexes[MAX_PIPES];
-int pipeIndex;
-int numPipes;
+unsigned int redirFlags; 
 
+//arrays where all the pipes and redirections on the user's input are stored
+int pipeIndexes[MAX_PIPES]; 
+int redirIndexes[MAX_REDIRS];
+
+//Where a pipe or redirection is located on the user's input
+int pipeIndex;
+int redirIndex;
+
+//Number of pipes and redirections on the user's input
+int numPipes;
+int numRedirs;
+
+//Process corresponding to a redirection
+
+int redirProc;
+
+
+
+/* ~~~ GLOBAL FUNCTIONS DECLARATIONS ~~~ */
+
+
+/*ARGUMENTS EXPLANATION:
+ *
+ * *input -> unmodified user input
+ * *argv[] -> array where the user input is going to be modified
+ */
 
 void parser(char *input, char *argv[]){ //parse the user's input
-        int i, j = 0, k = 0;
+        int i, j = 0, k = 0, l = 0;
         bool word = false;
-        for (i = 0; input[i] != '\0'; i++){
+        for (i = 0; input[i] != '\0'; i++){ 
             if (input[i] == ' '){
                 input[i] = '\0';
                 word = false;
                 continue;
             }
 
-            if (input[i] == '|'){
+            else if (input[i] == '|'){ //check if there's a pipe character in the input
                 argv[j] = "|";
                 word = false;
-                flags |= PIPELINE_FLAG;
-                pipeIndex = j;
-                pipeIndexes[k] = pipeIndex;
+                flags |= PIPELINE_FLAG; //activate the pipeline flag...
+                pipeIndex = j;//...save the pipe position to a pipe index
+                pipeIndexes[k] = pipeIndex;//and add that pipe to an array with the pipe indexes
                 numPipes++;
                 j++;
                 k++;
@@ -63,252 +105,304 @@ void parser(char *input, char *argv[]){ //parse the user's input
 
             }
 
-            if (input[i] == '>' && input[i+1] == '>'){
+            else if (input[i] == '>' && input[i+1] == '>'){ //check if there's a >> in the input
                 argv[j] = ">>";
-                j++;
                 word = false;
-                i++; 
+                i++;
+		        j++;
                 continue;
             }
 
-            if (input[i] == '>'){
+            else if (input[i] == '>'){
                 argv[j] = ">";
-                j++;
                 word = false;
+                redirIndex = j;
+                redirIndexes[l] = redirIndex;
+                numRedirs++;
+                j++;
+                l++;
                 continue;
             }
 
-            if (input[i] == '<'){
+            else if (input[i] == '<'){
                 argv[j] = "<";
-                j++;
                 word = false;
+                redirIndex = j;
+                redirIndexes[l] = redirIndex;
+                numRedirs++;
+                j++;
+                l++;
                 continue;
             }
 
             if (input[i] != ' ' && word == false){
                     argv[j] = &input[i];
+		            word = true;
                     j++;
-
-            if (input[i] != ' ')
-                word = true;
             }
         }
     argv[j] = NULL;
 }
 
-void printPrompt(void){
+void printPrompt(void){ //print the user's promt
 	
-    char buffer[256];
-    char *user = getenv("USER"); //get the user's username
-    snprintf(buffer, sizeof(buffer), "/home/%s", user);
+    char homeDir[256];
+    char currentDir[256];
+    char *user = getenv("USER"); 
+    snprintf(homeDir, sizeof(homeDir), "/home/%s", user);
     char *cwd = getcwd(NULL, 0);
     char host[HOST_NAME_MAX + 1];
     gethostname(host, sizeof(host));
-    strcmp(cwd, buffer) == 0 ? printf("\x1B[1;36m%s@%s\x1B[0m:~$ ", user, host)
-    : printf("\x1B[1;36m%s@%s\x1B[0m:%s$ ", user, host, cwd);
+    int homeDirEnd = strlen(homeDir);
+    strcpy(currentDir, cwd + homeDirEnd);
+
+    if (strcmp(cwd, homeDir) == 0) printf("\x1B[1;36m%s@%s\x1B[0m:~$ ", user, host);
+    else if (strstr(cwd, homeDir) != NULL) printf("\x1B[1;36m%s@%s\x1B[0m:~%s$ ", user, host, currentDir);
+    else printf("\x1B[1;36m%s@%s\x1B[0m:%s$ ", user, host, cwd);
+    
     free(cwd);
+    
 }
 
+/* ~~~ MAIN FUNCTION ~~~ */
 
-int main(int argc, char **argv)
-{
-    char input[255];
+int main(int argc, char **argv){ 
+
+	struct sigaction sa; //TODO: config the sigaction struct parameters		
+    
+	char input[255]; //unmodified user's input is stored here
   
-    puts("You are now using \x1B[1;36mradish\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m");
+    	puts("You are now using \x1B[1;36mRADISH\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m"); 
     
 
-    while (1) //Main loop
-    {
-        printPrompt();
-        fflush(stdout);
-        if (!fgets(input, MAX_INPUT, stdin)) break;
-        
-    input[strcspn(input, "\n")] = 0;
+    	while (1){ //Main loop
+	
+		printPrompt();
+		fflush(stdout);
+		if (!fgets(input, MAX_INPUT, stdin)) break;
+		
+		input[strcspn(input, "\n")] = 0;
 
-    if (strlen(input) == 0) continue;
+		if (strlen(input) == 0) continue;
 
-    for (int i = 0; pipeIndexes[i] != '\0'; i++) pipeIndexes[i] = 0;
-    numPipes = 0;
-    pipeIndex = 0;
-
-
-    char *args[MAX_INPUT]; //User's input is stored here
-
-    parser(input, args); //
-
-    //Some built-in commands and some new commands are down below
-     
-    if (strcmp(args[0], "cd") == 0){ 
-         if (!args[1]){
-            chdir(getenv("HOME")); //get the user's home directory
-         } else{
-             if (chdir(args[1]) != 0){
-                perror("cd");
-            }
-         }
-        continue;
-        
-    }
-
-    
-    if (strcmp(args[0], "exit") == 0){
-        exit(0); //exti the program 
-    }
-
-    if (strcmp(args[0], "openshell") == 0){ //
-        pid_t pid = fork();
-
-        if (pid == 0)
-        {
-            char *term = getenv("TERMINAL"); //get the user's default terminal
-
-            if (term){
-                execlp(term, term, "-e", "./hf-shell", NULL);
-                execlp(term, term, "--", "./hf-shell", NULL);
-            }
-
-            execlp("x-terminal-emulator", "x-terminal-emulator", "-e", "./hf-shell", NULL);
-            execlp("kitty", "kitty", "-e", "./hf-shell", NULL);
-            execlp("konsole", "konsole", "-e", "./shell", NULL);
-            execlp("gnome-terminal", "gnome-terminal", "--", "./hf-shell", NULL);
-            execlp("xfce4-terminal", "xfce4-terminal", "-e", "./hf-shell", NULL);
-            execlp("alacritty", "alacritty", "-e", "./hf-shell", NULL);
-            execlp("mate-terminal", "mate-terminal", "-e", "./hf-shell", NULL);
-            execlp("xterm", "xterm", "-e", "./hf-shell", NULL);
-            perror("Compatible terminal not found");
-            exit(1);
-            execvp(args[0], args);
-            perror("execvp");
-            exit(1);
-        }
-    
-
-        wait(NULL);
-        continue;
-        
-    }
- 
-    if (flags & PIPELINE_FLAG){ //Execute the user's input if there's a pipeline
-                
-            int procs = numPipes + 1; //Number of process
-            int fd[2 * numPipes];
-            int fdIndex = 0;
-            int start[procs];
-            start[0] = 0;
-            for (int i = 0; i < numPipes; i++){
-                if (pipe(&fd[2 * i]) == -1){
-                    printf("Error while doing the pipe");
-                    return 0;
-                }   
-            }
-
-            for (int i = 0; pipeIndexes[i] != '\0'; i++) args[pipeIndexes[i]] = NULL;
-
-            pid_t pids[procs];
-
-            for (int i = 0; i < procs; i++){
-
-                pids[i] = fork();
-
-
-                if (pids[i] == 0) {
-
-                    if (i == 0) dup2(fd[1], STDOUT_FILENO);
-                    else if (i == procs - 1) dup2(fd[2 * (numPipes - 1)], STDIN_FILENO);
-                    else {dup2(fd[2 * (i - 1)], STDIN_FILENO); dup2(fd[2 * i + 1], STDOUT_FILENO);}
-                    for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
-                    for (int i = 1; i < procs; i++) start[i] = pipeIndexes[i - 1] + 1;
-
-                    execvp(args[start[i]], &args[start[i]]);
-                    perror("execvp");
-                    exit(1);
-                    
-
-                }
-
-            }
+		    for (int i = 0; pipeIndexes[i] != '\0'; i++) pipeIndexes[i] = 0;
+		    for (int i = 0; redirIndexes[i] != '\0'; i++) redirIndexes[i] = 0;
+		    numPipes = 0;
+		    numRedirs = 0;
+		    pipeIndex = 0;
+		    redirIndex = 0;
+            redirProc = 0;
             
-            for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
-            for (int i = 0; i < procs; i++) wait(NULL);
-            flags &= ~PIPELINE_FLAG;
-            continue;
 
 
-    }
+		    char *args[MAX_INPUT]; //User's input is stored here for later modifications
 
-    int redirection_type = 0; //Check if the user's input has any redirection
-    int j;
-    int redirection_index;
-    for (j = 0; args[j] != NULL; j++){
-         if (strcmp(args[j], ">") == 0){
-            redirection_type = 1;
-            redirection_index = j;
-            args[j] = NULL;
-         }
+		    parser(input, args);
 
-         else if (strcmp(args[j], ">>") == 0){
-            redirection_type = 2;
-            redirection_index = j;
-            args[j] = NULL;
-         }
+            //Debugging prints 
 
-         else if (strcmp(args[j], "<") == 0){
-            redirection_type = 3;
-            redirection_index = j;
-            args[j] = NULL;
-         }
-    }
+		    //for (int i = 0; redirIndexes[i] != NULL; i++) printf("Redirection number %d found on input index: %d\n", i, redirIndexes[i]);
+            //for (int i = 0; args[i] != NULL; i++) printf("Argumen number %d: %s\n", i, args[i]); 
 
-    if (redirection_type != 0){//Execute the user's input if there's a redirection
-        pid_t pid = fork();
-        if (pid == 0){
-            int fd_archivo;
-            if (redirection_type == 1){
-                fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            }
 
-            else if (redirection_type == 2){
-                fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
-            }
-            
-            else if (redirection_type == 3){
-                fd_archivo = open(args[redirection_index + 1], O_RDONLY, 0644);
-            }
-            
-            
-            if (fd_archivo == -1){
-                perror("open");
-                exit(1);
-            }
-            if (redirection_type == 1 || redirection_type == 2){
-                dup2(fd_archivo, STDOUT_FILENO);
-            }
-            else if (redirection_type == 3){
-                dup2(fd_archivo, STDIN_FILENO);
-            }
-            if (close(fd_archivo) == -1){   
-                perror("close");
-                exit(1);
-            }
-            execvp(args[0], args);
-        }
+		    //Some built-in commands and some new commands are down below
+		     
+		    if (strcmp(args[0], "cd") == 0){ 
+			 if (!args[1]){
+			    chdir(getenv("HOME")); //get the user's home directory
+			 } else{
+			     if (chdir(args[1]) != 0){
+				perror("cd");
+			    }
+			 }
+			continue;
+			
+		    }
+
+		    
+		    if (strcmp(args[0], "exit") == 0) exit(0); 
+
+		    if (strcmp(args[0], "openshell") == 0){
+			/* Open a new shell if "openshell" is the first argument
+			 * This won't work if you don't have a desktop environment*/
+			pid_t pid = fork();
+
+			if (pid == 0)
+			{
+			    char *term = getenv("TERMINAL"); //get the user's default terminal
+
+			    if (term){
+				execlp(term, term, "-e", "./radish", NULL);
+				execlp(term, term, "--", "./radish", NULL);
+			    }
+
+			    execlp("x-terminal-emulator", "x-terminal-emulator", "-e", "./radish", NULL);
+			    execlp("kitty", "kitty", "-e", "./radish", NULL);
+			    execlp("konsole", "konsole", "-e", "./radish", NULL);
+			    execlp("gnome-terminal", "gnome-terminal", "--", "./radish", NULL);
+			    execlp("xfce4-terminal", "xfce4-terminal", "-e", "./radish", NULL);
+			    execlp("alacritty", "alacritty", "-e", "./radish", NULL);
+			    execlp("mate-terminal", "mate-terminal", "-e", "./radish", NULL);
+			    execlp("xterm", "xterm", "-e", "./radish", NULL);
+			    perror("Compatible terminal not found");
+			    exit(1);
+			    execvp(args[0], args);
+			    perror("execvp");
+			    exit(1);
+			}
+		    
+
+			wait(NULL);
+			continue;
+			
+		    }
+		 
+		    if (flags & PIPELINE_FLAG){ //Execute the user's input if there's a pipeline
+			       
+			    int procs = numPipes + 1; //Number of process
+			    int fd[2 * numPipes];//All file descriptors for the pipes
+			    int fdRedirs[2 * numRedirs];//All file descriptores for the redirections
+			    int fdIndex = 0;
+			    int start[procs];
+			    start[0] = 0;
+
+			    for (int i = 0; i < numPipes; i++) if (pipe(&fd[2 * i]) == -1){perror("pipe"); return 0;}   
+			    for (int i = 0; pipeIndexes[i] != '\0'; i++) args[pipeIndexes[i]] = NULL;
+			    			    
+			    pid_t pids[procs];
+
+			    for (int i = 0; i < procs; i++){
+
+				pids[i] = fork();
+
+				if (pids[i] == 0) {
+
+				    if (i == 0) dup2(fd[1], STDOUT_FILENO);
+				    else if (i == procs - 1) dup2(fd[2 * (numPipes - 1)], STDIN_FILENO);
+				    else {dup2(fd[2 * (i - 1)], STDIN_FILENO); dup2(fd[2 * i + 1], STDOUT_FILENO);}
+
+                    if (i == procs - 1){
+                        for (int j = 0; j < numRedirs; j++){
+
+                            int redirStatus = 1;
+
+                            //for (int k = 0; k < redirIndexes[j]; k++) if (strcmp(args[k], "|") == 0) redirProc++;
+
+                            if (strcmp(args[redirIndexes[j]], ">") == 0) redirFlags = O_WRONLY | O_CREAT | O_TRUNC; 
+                            else if (strcmp(args[redirIndexes[j]], "<") == 0){redirFlags = O_RDONLY; redirStatus = 0;}
+                            else if (strcmp(args[redirIndexes[j]], ">>") == 0) redirFlags = O_WRONLY | O_CREAT | O_APPEND;
+                        
+                            int fdRedir = open(args[redirIndexes[j] + 1], redirFlags, 0644);
+
+                            if (fdRedir == -1){
+                                perror("open"); 
+                                return 0;
+                            }
+
+                            dup2(fdRedir, redirStatus);
+                            close(fdRedir);
+
+                            }
         
-        wait(NULL);
-        continue;
-    }
+                    }
 
-    
-    pid_t pid = fork();// Execute the user's input if there's no pipeline or redirection
+                    for (int i = 0; redirIndexes[i] != '\0'; i++){ args[redirIndexes[i]] = NULL; args[redirIndexes[i] + 1] = NULL;}
 
-    if (pid == 0){
-        execvp(args[0], args);
-        printf("radish: %s: command not found\n", args[0]);
-        exit(1);
-    }
-    else wait(NULL);
-    
-    }
-return 0; 
+
+				    for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
+                    for (int i = 0; i < 2 * numRedirs; i++) close(fdRedirs[i]);
+				    for (int i = 1; i < procs; i++) start[i] = pipeIndexes[i - 1] + 1;
+
+				    execvp(args[start[i]], &args[start[i]]);
+				    perror("execvp");
+				    exit(1);
+				    
+
+				}
+
+			    }
+			    
+			    for (int i = 0; i < 2 * numPipes; i++) close(fd[i]);
+			    for (int i = 0; i < procs; i++) wait(NULL);
+			    flags &= ~PIPELINE_FLAG;
+			    continue;
+
+
+		    }
+
+		    int redirection_type = 0; //Check if the user's input has any redirection
+		    int j;
+		    int redirection_index;
+		    for (j = 0; args[j] != NULL; j++){
+			 if (strcmp(args[j], ">") == 0){
+			    redirection_type = 1;
+			    redirection_index = j;
+			    args[j] = NULL;
+			 }
+
+			 else if (strcmp(args[j], ">>") == 0){
+			    redirection_type = 2;
+			    redirection_index = j;
+			    args[j] = NULL;
+			 }
+
+			 else if (strcmp(args[j], "<") == 0){
+			    redirection_type = 3;
+			    redirection_index = j;
+			    args[j] = NULL;
+			 }
+		    }
+
+		    if (redirection_type != 0){//Execute the user's input if there's a redirection
+			pid_t pid = fork();
+			if (pid == 0){
+			    int fd_archivo;
+			    if (redirection_type == 1){
+				fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+			    }
+
+			    else if (redirection_type == 2){
+				fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
+			    }
+			    
+			    else if (redirection_type == 3){
+				fd_archivo = open(args[redirection_index + 1], O_RDONLY, 0644);
+			    }
+			    
+			    
+			    if (fd_archivo == -1){
+				perror("open");
+				exit(1);
+			    }
+			    if (redirection_type == 1 || redirection_type == 2){
+				dup2(fd_archivo, STDOUT_FILENO);
+			    }
+			    else if (redirection_type == 3){
+				dup2(fd_archivo, STDIN_FILENO);
+			    }
+			    if (close(fd_archivo) == -1){   
+				perror("close");
+				exit(1);
+			    }
+			    execvp(args[0], args);
+			}
+			
+			wait(NULL);
+			continue;
+		    }
+
+		    
+		    pid_t pid = fork();// Execute the user's input if there's no pipeline or redirection
+
+		    if (pid == 0){
+			execvp(args[0], args);
+			printf("-radish: %s: command not found\n", args[0]);
+			exit(1);
+		    }
+		    else wait(NULL);
+		    
+		    }
+	return 0; 
 }
 
 
