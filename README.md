@@ -2,7 +2,7 @@
 
 RADISH - Real And Definitive implementation of a SHell
 
-- Current version: v1.2.5
+- Current version: v1.2.6
 
 
 ### Things included in this version
@@ -13,14 +13,17 @@ RADISH - Real And Definitive implementation of a SHell
 - Execution flags (pipeline flag, redirection flag...)
 - Pipelines support
 - Single redirections support
+- Combination of pipelines and redirections (only for the last argument)
+- A bash instalation script
+- A homebrew man page (WIP)
 
 ### Things NOT included in this version (they will be added in later versions)
 
 - Multiple redirections
-- Advanced parser
+- Advanced parser (maybe)
 - More built-in commands
-- Other types of special commands (like && or &)
-- Combination of pipelines and redirections
+- Job handling
+- Combination of pipelines and redirections for all arguments
 
 ### IMPORTANT NOTES
 
