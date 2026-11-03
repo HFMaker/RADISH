@@ -28,7 +28,7 @@ RADISH - Real And Definitive implementation of a SHell
 ### IMPORTANT NOTES
 
 - All the comments are in English
-- If you see someone called "alumno7", that's me using another PC
+- If you see someone called "alumno7" or similar, that's me using another PC
 
 
 
