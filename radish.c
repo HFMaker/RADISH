@@ -21,7 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 /*
  * Finish the pipes + redirections implementation (right now it only works for the last argument)
- * Implement signal handling (for now Ctrl+C and Ctrl+Z)
+ * Implement signal handling (for now Ctrl+C and Ctrl+Z will be enough)
+ * Use termios to read the user input and handle ANSI escape sequences (like ESC, Arrows, F5...)
  *
  *
  *
@@ -171,6 +172,8 @@ int main(int argc, char **argv){
 	struct sigaction sa; //TODO: config the sigaction struct parameters		
     
 	char input[255]; //unmodified user's input is stored here
+	char *args[MAX_INPUT]; //User's input is stored here for later modifications
+
   
     	puts("You are now using \x1B[1;36mRADISH\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m"); 
     
@@ -195,8 +198,7 @@ int main(int argc, char **argv){
             
 
 
-		    char *args[MAX_INPUT]; //User's input is stored here for later modifications
-
+		  
 		    parser(input, args);
 
             //Debugging prints 
@@ -208,7 +210,7 @@ int main(int argc, char **argv){
 		    //Some built-in commands and some new commands are down below
 		     
 		    if (strcmp(args[0], "cd") == 0){ 
-			 if (!args[1]){
+			 if (!args[1] || strcmp(args[1], "~") == 0){
 			    chdir(getenv("HOME")); //get the user's home directory
 			 } else{
 			     if (chdir(args[1]) != 0){
