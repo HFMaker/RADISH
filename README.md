@@ -2,7 +2,7 @@
 
 RADISH - Real And Definitive implementation of a SHell
 
-- Current version: v1.2.6
+- Current version: v1.2.7
 
 
 ### Things included in this version

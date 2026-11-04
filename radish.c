@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /*
  * Finish the pipes + redirections implementation (right now it only works for the last argument)
  * Implement signal handling (for now Ctrl+C and Ctrl+Z will be enough)
- * Use termios to read the user input and handle ANSI escape sequences (like ESC, Arrows, F5...)
+ * Fix the "clear and exit" bug 
  *
  *
  *
@@ -41,6 +41,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdbool.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <termios.h>
 
 /* ~~~ MACROS AND FLAGS DECLARATIONS ~~~ */
 
@@ -72,9 +73,28 @@ int numRedirs;
 
 int redirProc;
 
+static struct termios ogTermios;
 
 
 /* ~~~ GLOBAL FUNCTIONS DECLARATIONS ~~~ */
+
+
+
+void rawModeON(){
+    
+    tcgetattr(STDIN_FILENO, &ogTermios);
+    struct termios term = ogTermios;
+    term.c_lflag &= ~(ICANON | ECHO);
+    term.c_cc[VMIN] = 1;
+    term.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
+void rawModeOFF(){
+    tcsetattr(STDIN_FILENO, TCSANOW, &ogTermios);
+}
+
+
 
 
 /*ARGUMENTS EXPLANATION:
@@ -109,8 +129,11 @@ void parser(char *input, char *argv[]){ //parse the user's input
             else if (input[i] == '>' && input[i+1] == '>'){ //check if there's a >> in the input
                 argv[j] = ">>";
                 word = false;
-                i++;
+                redirIndex = j;
+                redirIndexes[l] = redirIndex;
+                numRedirs++;
 		        j++;
+                l++;
                 continue;
             }
 
@@ -147,18 +170,16 @@ void parser(char *input, char *argv[]){ //parse the user's input
 
 void printPrompt(void){ //print the user's promt
 	
-    char homeDir[256];
     char currentDir[256];
     char *user = getenv("USER"); 
-    snprintf(homeDir, sizeof(homeDir), "/home/%s", user);
     char *cwd = getcwd(NULL, 0);
     char host[HOST_NAME_MAX + 1];
     gethostname(host, sizeof(host));
-    int homeDirEnd = strlen(homeDir);
+    int homeDirEnd = strlen(getenv("HOME"));
     strcpy(currentDir, cwd + homeDirEnd);
 
-    if (strcmp(cwd, homeDir) == 0) printf("\x1B[1;36m%s@%s\x1B[0m:~$ ", user, host);
-    else if (strstr(cwd, homeDir) != NULL) printf("\x1B[1;36m%s@%s\x1B[0m:~%s$ ", user, host, currentDir);
+    if (strcmp(cwd, getenv("HOME")) == 0) printf("\x1B[1;36m%s@%s\x1B[0m:~$ ", user, host);
+    else if (strstr(cwd, getenv("HOME")) != NULL) printf("\x1B[1;36m%s@%s\x1B[0m:~%s$ ", user, host, currentDir);
     else printf("\x1B[1;36m%s@%s\x1B[0m:%s$ ", user, host, cwd);
     
     free(cwd);
@@ -171,23 +192,70 @@ int main(int argc, char **argv){
 
 	struct sigaction sa; //TODO: config the sigaction struct parameters		
     
-	char input[255]; //unmodified user's input is stored here
+	char input[MAX_INPUT] = {0}; //unmodified user's input is stored here
 	char *args[MAX_INPUT]; //User's input is stored here for later modifications
-
-  
+      
     	puts("You are now using \x1B[1;36mRADISH\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m"); 
     
 
     	while (1){ //Main loop
-	
-		printPrompt();
-		fflush(stdout);
-		if (!fgets(input, MAX_INPUT, stdin)) break;
+        
+            /* ~~~ INPUT HANDLING BLOCK ~~~ */
+
+            rawModeON();
+		    printPrompt();
+		    fflush(stdout);
+    
+            char ch;
+            int charIndex = 0;
+ 
+            while (read(STDIN_FILENO, &ch, 1) == 1){
+
+                int c = (unsigned char) ch;
+                if (c == '\n') { write(STDOUT_FILENO, "\n", 1); break; } //Enter
+                else if (c == 4) break;
+                else if (c == 3) { memset(input, 0, sizeof(input)); charIndex = 0; break; } //Ctrl + C
+                else if (c == 127 || c == 8) { // Backspace
+                    if (charIndex > 0) { 
+                        charIndex--; 
+                        write(STDOUT_FILENO, "\b \b", 3); 
+                    }
+                    continue;
+                }
+
+                else if (c == 0x1b){
+
+                    char seq[2];
+                    read(STDIN_FILENO, &seq[0], 1);
+                    read(STDIN_FILENO, &seq[1], 1);
+
+                    if (seq[0] == '['){
+
+                        switch(seq[1]){
+
+                            case 'A': break;
+                            case 'B': break;
+                            case 'C': break;
+                            case 'D': break;
+
+                        }
+                    } 
+                }
+
+                else {
+
+                    if (charIndex < MAX_INPUT - 1){
+
+                        input[charIndex++] = c;
+                        write(STDOUT_FILENO, &c, 1);
+
+                    }
+                }
+            }
+
+            input[charIndex] = '\0';
+            if (strlen(input) == 0) continue;
 		
-		input[strcspn(input, "\n")] = 0;
-
-		if (strlen(input) == 0) continue;
-
 		    for (int i = 0; pipeIndexes[i] != '\0'; i++) pipeIndexes[i] = 0;
 		    for (int i = 0; redirIndexes[i] != '\0'; i++) redirIndexes[i] = 0;
 		    numPipes = 0;
@@ -196,18 +264,16 @@ int main(int argc, char **argv){
 		    redirIndex = 0;
             redirProc = 0;
             
-
-
-		  
+            rawModeOFF();
 		    parser(input, args);
 
-            //Debugging prints 
+            /* ~~~ DEBUGGING PRINTS ~~~ */
 
 		    //for (int i = 0; redirIndexes[i] != NULL; i++) printf("Redirection number %d found on input index: %d\n", i, redirIndexes[i]);
             //for (int i = 0; args[i] != NULL; i++) printf("Argumen number %d: %s\n", i, args[i]); 
 
 
-		    //Some built-in commands and some new commands are down below
+		    /* ~~~ BUILT-INT COMMANDS BLOCK ~~~ */
 		     
 		    if (strcmp(args[0], "cd") == 0){ 
 			 if (!args[1] || strcmp(args[1], "~") == 0){
@@ -234,18 +300,18 @@ int main(int argc, char **argv){
 			    char *term = getenv("TERMINAL"); //get the user's default terminal
 
 			    if (term){
-				execlp(term, term, "-e", "./radish", NULL);
-				execlp(term, term, "--", "./radish", NULL);
+				execlp(term, term, "-e", "./usr/bin/radish", NULL);
+				execlp(term, term, "--", "./usr/bin/radish", NULL);
 			    }
 
-			    execlp("x-terminal-emulator", "x-terminal-emulator", "-e", "./radish", NULL);
-			    execlp("kitty", "kitty", "-e", "./radish", NULL);
-			    execlp("konsole", "konsole", "-e", "./radish", NULL);
-			    execlp("gnome-terminal", "gnome-terminal", "--", "./radish", NULL);
-			    execlp("xfce4-terminal", "xfce4-terminal", "-e", "./radish", NULL);
-			    execlp("alacritty", "alacritty", "-e", "./radish", NULL);
-			    execlp("mate-terminal", "mate-terminal", "-e", "./radish", NULL);
-			    execlp("xterm", "xterm", "-e", "./radish", NULL);
+			    execlp("x-terminal-emulator", "x-terminal-emulator", "-e", "radish", NULL);
+			    execlp("kitty", "kitty", "-e", "radish", NULL);
+			    execlp("konsole", "konsole", "-e", "radish", NULL);
+			    execlp("gnome-terminal", "gnome-terminal", "--", "radish", NULL);
+			    execlp("xfce4-terminal", "xfce4-terminal", "-e", "radish", NULL);
+			    execlp("alacritty", "alacritty", "-e", "radish", NULL);
+			    execlp("mate-terminal", "mate-terminal", "-e", "radish", NULL);
+			    execlp("xterm", "xterm", "-e", "radish", NULL);
 			    perror("Compatible terminal not found");
 			    exit(1);
 			    execvp(args[0], args);
@@ -258,8 +324,10 @@ int main(int argc, char **argv){
 			continue;
 			
 		    }
+
+            /* ~~~ PIPELINE BLOCK ~~~ */
 		 
-		    if (flags & PIPELINE_FLAG){ //Execute the user's input if there's a pipeline
+		    if (flags & PIPELINE_FLAG){
 			       
 			    int procs = numPipes + 1; //Number of process
 			    int fd[2 * numPipes];//All file descriptors for the pipes
@@ -332,6 +400,8 @@ int main(int argc, char **argv){
 
 		    }
 
+            /* ~~~ REDIRECTIONS BLOCK ~~~ */
+
 		    int redirection_type = 0; //Check if the user's input has any redirection
 		    int j;
 		    int redirection_index;
@@ -393,8 +463,9 @@ int main(int argc, char **argv){
 			continue;
 		    }
 
+            /* ~~~ SIMPLE COMMANDS BLOCK ~~~ */
 		    
-		    pid_t pid = fork();// Execute the user's input if there's no pipeline or redirection
+		    pid_t pid = fork();
 
 		    if (pid == 0){
 			execvp(args[0], args);
