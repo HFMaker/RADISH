@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /*
  * Finish the pipes + redirections implementation (right now it only works for the last argument)
  * Implement signal handling (for now Ctrl+C and Ctrl+Z will be enough)
- * Fix the "clear and exit" bug 
+ * 
  *
  *
  *
@@ -293,6 +293,7 @@ int main(int argc, char **argv){
 		    if (strcmp(args[0], "openshell") == 0){
 			/* Open a new shell if "openshell" is the first argument
 			 * This won't work if you don't have a desktop environment*/
+			rawModeOFF();
 			pid_t pid = fork();
 
 			if (pid == 0)
@@ -342,7 +343,7 @@ int main(int argc, char **argv){
 			    pid_t pids[procs];
 
 			    for (int i = 0; i < procs; i++){
-
+				rawModeOFF();
 				pids[i] = fork();
 
 				if (pids[i] == 0) {
@@ -426,6 +427,7 @@ int main(int argc, char **argv){
 		    }
 
 		    if (redirection_type != 0){//Execute the user's input if there's a redirection
+			rawModeOFF();
 			pid_t pid = fork();
 			if (pid == 0){
 			    int fd_archivo;
@@ -465,6 +467,7 @@ int main(int argc, char **argv){
 
             /* ~~~ SIMPLE COMMANDS BLOCK ~~~ */
 		    
+		    rawModeOFF();
 		    pid_t pid = fork();
 
 		    if (pid == 0){
@@ -475,6 +478,8 @@ int main(int argc, char **argv){
 		    else wait(NULL);
 		    
 		    }
+	
+	rawModeOFF();
 	return 0; 
 }
 
