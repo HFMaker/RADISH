@@ -288,7 +288,7 @@ int main(int argc, char **argv){
 		    }
 
 		    
-		    if (strcmp(args[0], "exit") == 0) exit(0); 
+		    if (strcmp(args[0], "exit") == 0) {rawModeOFF(); exit(0);}
 
 		    if (strcmp(args[0], "openshell") == 0){
 			/* Open a new shell if "openshell" is the first argument
@@ -314,9 +314,11 @@ int main(int argc, char **argv){
 			    execlp("mate-terminal", "mate-terminal", "-e", "radish", NULL);
 			    execlp("xterm", "xterm", "-e", "radish", NULL);
 			    perror("Compatible terminal not found");
+			    rawModeOFF();
 			    exit(1);
 			    execvp(args[0], args);
 			    perror("execvp");
+			    rawModeOFF();
 			    exit(1);
 			}
 		    
