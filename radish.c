@@ -212,7 +212,7 @@ int main(int argc, char **argv){
             while (read(STDIN_FILENO, &ch, 1) == 1){
 
                 int c = (unsigned char) ch;
-                if (c == '\n') { write(STDOUT_FILENO, "\n", 1); break; } //Enter
+                if (c == '\n') { write(STDOUT_FILENO, "\n", 1); rawModeOFF(); break; } //Enter
                 else if (c == 4) break;
                 else if (c == 3) { memset(input, 0, sizeof(input)); charIndex = 0; break; } //Ctrl + C
                 else if (c == 127 || c == 8) { // Backspace
